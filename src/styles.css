@@ -719,7 +719,7 @@ input:focus {
   align-items: end;
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: minmax(9rem, 1fr) auto auto;
+  grid-template-columns: minmax(9rem, 1fr) auto auto auto;
 }
 
 .deck-tools {
@@ -750,6 +750,112 @@ input:focus {
   font-weight: 900;
   justify-self: end;
   white-space: nowrap;
+}
+
+.joker-tracker {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.joker-tracker div {
+  align-items: center;
+  background: #f7efe2;
+  border: 1px solid #d6c3a7;
+  border-radius: 7px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+}
+
+.joker-tracker span {
+  color: #5e5045;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.joker-tracker strong {
+  color: #26353a;
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.joker-tracker p {
+  background: #f9ded7;
+  border: 1px solid #dfa997;
+  border-radius: 7px;
+  color: #8a2f1f;
+  font-size: 0.82rem;
+  font-weight: 900;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+}
+
+.discard-pile {
+  background: #f6ecde;
+  border: 1px solid #dfceb5;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.68rem;
+}
+
+.discard-pile header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.discard-pile h3 {
+  color: #1f2f32;
+  font-size: 1rem;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.discard-pile p {
+  color: #73665b;
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.discard-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.card-token,
+.discard-more {
+  align-items: center;
+  background: #fff8ec;
+  border: 1px solid #d6c3a7;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 950;
+  gap: 0.24rem;
+  min-height: 1.6rem;
+  padding: 0 0.52rem;
+}
+
+.card-token.red {
+  color: #b3282a;
+}
+
+.card-token.black {
+  color: #1f2628;
+}
+
+.card-token small {
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.discard-more {
+  color: #6b5c4f;
 }
 
 .stepper {
@@ -836,7 +942,8 @@ input:focus {
 
   .roll-form,
   .draw-controls,
-  .deck-tools {
+  .deck-tools,
+  .joker-tracker {
     grid-template-columns: 1fr;
   }
 

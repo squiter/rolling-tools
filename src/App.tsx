@@ -68,8 +68,9 @@ export function App() {
   const [cardHistory, setCardHistory] = useState<CardDraw[]>([]);
   const [cardCount, setCardCount] = useState(1);
   const [includeJokers, setIncludeJokers] = useState(true);
+  const [returnJokers, setReturnJokers] = useState(true);
   const [deckRemaining, setDeckRemaining] = useState<PlayingCard[]>(() => shuffleCards(buildDeck(true)));
-  const [drawnCards, setDrawnCards] = useState<PlayingCard[]>([]);
+  const [discardPile, setDiscardPile] = useState<PlayingCard[]>([]);
   const [diceError, setDiceError] = useState<string | null>(null);
   const [diceOverlayVisible, setDiceOverlayVisible] = useState(false);
   const diceBoxRef = useRef<DiceBox | null>(null);
@@ -79,6 +80,13 @@ export function App() {
   const deckSize = includeJokers ? fullDeck.length : fullDeck.length - 2;
   const emptyDeck = deckRemaining.length === 0;
   const latestDraw = cardHistory[0];
+  const jokerCounts = countDrawnJokers(cardHistory);
+  const jokerAlert =
+    jokerCounts.red >= 3
+      ? "Third red joker reached."
+      : jokerCounts.black >= 3
+        ? "Third black joker reached."
+        : null;
 
   function addDiceBuilderDie(sides: number) {
     setDiceFormula((current) => incrementDiceFormula(current, sides, rollMode));
@@ -226,12 +234,20 @@ export function App() {
 
     const drawCount = Math.min(Math.max(Math.floor(cardCount), 1), deckRemaining.length);
     const cards = deckRemaining.slice(0, drawCount);
-    setDeckRemaining((current) => current.slice(drawCount));
-    setDrawnCards((current) => [...cards, ...current]);
+    const returnedJokers =
+      returnJokers && includeJokers ? cards.filter((card) => card.suit === "joker") : [];
+    const discardedCards = cards.filter((card) => !returnedJokers.some((joker) => joker.id === card.id));
+    const nextDeck = returnedJokers.length
+      ? shuffleCards([...deckRemaining.slice(drawCount), ...returnedJokers])
+      : deckRemaining.slice(drawCount);
+
+    setDeckRemaining(nextDeck);
+    setDiscardPile((current) => [...discardedCards, ...current]);
     setCardHistory((current) => [
-      { id: crypto.randomUUID(), cards, createdAt: new Date() },
+      { id: crypto.randomUUID(), cards, returnedJokers, createdAt: new Date() },
       ...current,
     ].slice(0, 12));
+    setCardCount((current) => Math.min(Math.max(nextDeck.length, 1), current));
   }
 
   function adjustCardCount(amount: number) {
@@ -243,9 +259,9 @@ export function App() {
   }
 
   function refillDeck() {
-    const nextDeck = shuffleCards([...deckRemaining, ...drawnCards]);
+    const nextDeck = shuffleCards([...deckRemaining, ...discardPile]);
     setDeckRemaining(nextDeck);
-    setDrawnCards([]);
+    setDiscardPile([]);
     setCardCount((current) => Math.min(Math.max(nextDeck.length, 1), Math.max(1, current)));
   }
 
@@ -253,7 +269,7 @@ export function App() {
     const nextDeck = shuffleCards(buildDeck(include));
     setIncludeJokers(include);
     setDeckRemaining(nextDeck);
-    setDrawnCards([]);
+    setDiscardPile([]);
     setCardCount((current) => Math.min(Math.max(nextDeck.length, 1), Math.max(1, current)));
   }
 
@@ -573,6 +589,16 @@ export function App() {
               <span>Jokers</span>
             </label>
 
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={returnJokers}
+                disabled={!includeJokers}
+                onChange={(event) => setReturnJokers(event.target.checked)}
+              />
+              <span>Return jokers</span>
+            </label>
+
             <button className="primary-button" type="button" onClick={drawCardSet} disabled={emptyDeck}>
               <Shuffle size={18} />
               <span>Draw</span>
@@ -584,7 +610,7 @@ export function App() {
               <Shuffle size={16} />
               <span>Shuffle</span>
             </button>
-            <button type="button" onClick={refillDeck} disabled={drawnCards.length === 0}>
+            <button type="button" onClick={refillDeck} disabled={discardPile.length === 0}>
               <RotateCcw size={16} />
               <span>Refill</span>
             </button>
@@ -593,12 +619,45 @@ export function App() {
             </span>
           </div>
 
+          <section className="joker-tracker" aria-label="Joker tracker">
+            <div>
+              <span>Red joker</span>
+              <strong>{jokerCounts.red}/3</strong>
+            </div>
+            <div>
+              <span>Black joker</span>
+              <strong>{jokerCounts.black}/3</strong>
+            </div>
+            {jokerAlert && <p>{jokerAlert}</p>}
+          </section>
+
+          <section className="discard-pile" aria-label="Discard pile">
+            <header>
+              <div>
+                <span className="eyebrow">Discard</span>
+                <h3>{discardPile.length} card{discardPile.length === 1 ? "" : "s"}</h3>
+              </div>
+            </header>
+            {discardPile.length === 0 ? (
+              <p>No discarded cards yet.</p>
+            ) : (
+              <div className="discard-list">
+                {discardPile.slice(0, 18).map((card, index) => (
+                  <CardToken card={card} key={`${card.id}-${index}`} />
+                ))}
+                {discardPile.length > 18 && <span className="discard-more">+{discardPile.length - 18}</span>}
+              </div>
+            )}
+          </section>
+
           <HistoryList
             emptyText="No cards drawn yet."
             entries={cardHistory.map((entry) => ({
               id: entry.id,
               title: entry.cards.map((card) => card.label).join(", "),
-              detail: `${entry.cards.length} card${entry.cards.length === 1 ? "" : "s"} at ${formatTime(entry.createdAt)}`,
+              detail: `${entry.cards.length} card${entry.cards.length === 1 ? "" : "s"} at ${formatTime(entry.createdAt)}${
+                entry.returnedJokers?.length ? ` - ${entry.returnedJokers.length} joker${entry.returnedJokers.length === 1 ? "" : "s"} returned` : ""
+              }`,
             }))}
           />
         </article>
@@ -639,6 +698,15 @@ function CardFace({ card }: { card: PlayingCard }) {
         <span>{glyph}</span>
       </span>
     </div>
+  );
+}
+
+function CardToken({ card }: { card: PlayingCard }) {
+  return (
+    <span className={`card-token ${card.color}`}>
+      <span>{card.shortLabel}</span>
+      <small>{suitGlyph(card.suit)}</small>
+    </span>
   );
 }
 
@@ -720,6 +788,19 @@ function formatTime(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function countDrawnJokers(history: CardDraw[]): { black: number; red: number } {
+  return history.reduce(
+    (counts, draw) => {
+      for (const card of draw.cards) {
+        if (card.id === "joker-red") counts.red += 1;
+        if (card.id === "joker-black") counts.black += 1;
+      }
+      return counts;
+    },
+    { black: 0, red: 0 },
+  );
 }
 
 function createPresetDraft(): CustomRollPreset {

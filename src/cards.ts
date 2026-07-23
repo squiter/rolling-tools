@@ -13,6 +13,7 @@ export interface PlayingCard {
 export interface CardDraw {
   id: string;
   cards: PlayingCard[];
+  returnedJokers?: PlayingCard[];
   createdAt: Date;
 }
 
