@@ -3,8 +3,10 @@ import DiceBox from "@3d-dice/dice-box";
 import {
   BadgeHelp,
   Dices,
+  ExternalLink,
   Pencil,
   History,
+  Link2,
   Minus,
   Plus,
   RotateCcw,
@@ -12,11 +14,22 @@ import {
   Settings,
   Shuffle,
   Trash2,
+  Unplug,
   X,
 } from "lucide-react";
 import { formatDiceRoll, getPhysicalDiceNotations, rollDiceFormula } from "./dice";
 import { appendModifier, incrementDiceFormula, RollMode } from "./diceTools";
 import { buildDeck, CardDraw, fullDeck, PlayingCard, shuffleCards, suitGlyph } from "./cards";
+import {
+  clearDiscordSettings,
+  DiscordResult,
+  DiscordSettings,
+  isDiscordWebhookUrl,
+  loadDiscordSettings,
+  normalizeDiscordWebhookUrl,
+  postDiscordResult,
+  saveDiscordSettings,
+} from "./discord";
 
 interface DiceHistoryEntry {
   id: string;
@@ -47,6 +60,7 @@ interface CustomRollPreset {
 
 const diceBuilderTypes = [4, 6, 8, 10, 12, 20, 100];
 const colorOptions = ["#2f6f8f", "#9c3434", "#b8792d", "#4f7d45", "#6b4aa0", "#2f3036"];
+const diceAssetPath = `${import.meta.env.BASE_URL}assets/`;
 const defaultPreset: CustomRollPreset = {
   id: "hope-fear",
   label: "Hope / Fear",
@@ -72,6 +86,12 @@ export function App() {
   const [discardPile, setDiscardPile] = useState<PlayingCard[]>([]);
   const [diceError, setDiceError] = useState<string | null>(null);
   const [diceOverlayVisible, setDiceOverlayVisible] = useState(false);
+  const [discordSettings, setDiscordSettings] = useState<DiscordSettings>(() => loadDiscordSettings());
+  const [discordWebhookDraft, setDiscordWebhookDraft] = useState(() => loadDiscordSettings().webhookUrl);
+  const [discordNameDraft, setDiscordNameDraft] = useState(() => loadDiscordSettings().displayName);
+  const [discordSettingsOpen, setDiscordSettingsOpen] = useState(false);
+  const [discordStatus, setDiscordStatus] = useState<string | null>(null);
+  const [discordError, setDiscordError] = useState<string | null>(null);
   const diceBoxRef = useRef<DiceBox | null>(null);
   const diceBoxReadyRef = useRef<Promise<DiceBox> | null>(null);
   const diceOverlayTimeoutRef = useRef<number | null>(null);
@@ -79,6 +99,7 @@ export function App() {
   const deckSize = includeJokers ? fullDeck.length : fullDeck.length - 2;
   const emptyDeck = deckRemaining.length === 0;
   const latestDraw = cardHistory[0];
+  const discordConnected = Boolean(discordSettings.webhookUrl);
 
   function addDiceBuilderDie(sides: number) {
     setDiceFormula((current) => incrementDiceFormula(current, sides, rollMode));
@@ -93,12 +114,21 @@ export function App() {
 
     try {
       const visualRolls = await rollVisualDice(diceFormula);
-      const result = formatDiceRoll(rollDiceFormula(diceFormula, visualRolls ?? undefined));
+      const roll = rollDiceFormula(diceFormula, visualRolls ?? undefined);
+      const result = formatDiceRoll(roll);
+      const createdAt = new Date();
       setDiceHistory((current) => [
-        { id: crypto.randomUUID(), label: result, detail: formatTime(new Date()), createdAt: new Date() },
+        { id: crypto.randomUUID(), label: result, detail: formatTime(createdAt), createdAt },
         ...current,
       ].slice(0, 12));
       setDiceError(null);
+      void publishDiscordResult({
+        kind: "dice",
+        formula: roll.formula,
+        total: roll.total,
+        breakdown: result,
+        createdAt,
+      });
     } catch (error) {
       setDiceError(error instanceof Error ? error.message : String(error));
     }
@@ -117,18 +147,27 @@ export function App() {
         value: rolls[index] ?? Math.floor(Math.random() * preset.sides) + 1,
       }));
       const total = parts.reduce((sum, part) => sum + part.value, 0);
+      const createdAt = new Date();
 
       setDiceHistory((current) => [
         {
           id: crypto.randomUUID(),
           label: `${preset.label || formula}: ${total}`,
-          detail: `${formula} at ${formatTime(new Date())}`,
+          detail: `${formula} at ${formatTime(createdAt)}`,
           parts,
-          createdAt: new Date(),
+          createdAt,
         },
         ...current,
       ].slice(0, 12));
       setDiceError(null);
+      void publishDiscordResult({
+        kind: "dice",
+        formula: preset.label || formula,
+        total,
+        breakdown: `${formula}: ${parts.map((part) => `${part.name} ${part.value}`).join(", ")}`,
+        parts: parts.map(({ name, value }) => ({ name, value })),
+        createdAt,
+      });
     } catch (error) {
       setDiceError(error instanceof Error ? error.message : String(error));
     }
@@ -178,6 +217,7 @@ export function App() {
 
   async function rollVisualDice(formula: string): Promise<number[][] | null> {
     let notations: string[];
+    let hideDelay = 0;
     try {
       notations = getPhysicalDiceNotations(formula);
     } catch {
@@ -189,8 +229,13 @@ export function App() {
     setDiceOverlayVisible(true);
 
     try {
-      const diceBox = await getDiceBox();
+      const diceBox = await withTimeout(
+        getDiceBox(),
+        12_000,
+        "3D dice renderer initialization timed out.",
+      );
       const results = await diceBox.roll(notations);
+      hideDelay = 2200;
       return getDiceBoxRollValues(results, notations);
     } catch (error) {
       console.error("3D dice roll failed", error);
@@ -199,7 +244,7 @@ export function App() {
       diceOverlayTimeoutRef.current = window.setTimeout(() => {
         setDiceOverlayVisible(false);
         diceBoxRef.current?.clear();
-      }, 2200);
+      }, hideDelay);
     }
   }
 
@@ -207,7 +252,7 @@ export function App() {
     if (diceBoxReadyRef.current) return diceBoxReadyRef.current;
 
     const diceBox = new DiceBox({
-      assetPath: "/assets/",
+      assetPath: diceAssetPath,
       container: "#rolling-tools-3d-dice-box",
       enableShadows: true,
       offscreen: true,
@@ -217,7 +262,13 @@ export function App() {
       throwForce: 8,
     });
     diceBoxRef.current = diceBox;
-    diceBoxReadyRef.current = diceBox.init();
+    diceBoxReadyRef.current = diceBox.init().catch((error) => {
+      if (diceBoxRef.current === diceBox) {
+        diceBoxRef.current = null;
+        diceBoxReadyRef.current = null;
+      }
+      throw error;
+    });
     return diceBoxReadyRef.current;
   }
 
@@ -227,14 +278,69 @@ export function App() {
     const drawCount = Math.min(Math.max(Math.floor(cardCount), 1), deckRemaining.length);
     const cards = deckRemaining.slice(0, drawCount);
     const nextDeck = deckRemaining.slice(drawCount);
+    const createdAt = new Date();
 
     setDeckRemaining(nextDeck);
     setDiscardPile((current) => [...cards, ...current]);
     setCardHistory((current) => [
-      { id: crypto.randomUUID(), cards, createdAt: new Date() },
+      { id: crypto.randomUUID(), cards, createdAt },
       ...current,
     ].slice(0, 12));
     setCardCount((current) => Math.min(Math.max(nextDeck.length, 1), current));
+    void publishDiscordResult({
+      kind: "cards",
+      cards: cards.map((card) => ({
+        label: card.label,
+        shortLabel: card.shortLabel,
+        glyph: suitGlyph(card.suit),
+      })),
+      remainingCards: nextDeck.length,
+      deckSize,
+      createdAt,
+    });
+  }
+
+  function connectDiscord(event: React.FormEvent) {
+    event.preventDefault();
+    if (!isDiscordWebhookUrl(discordWebhookDraft)) {
+      setDiscordError("Paste a valid webhook URL from a Discord channel.");
+      return;
+    }
+
+    const settings = {
+      webhookUrl: normalizeDiscordWebhookUrl(discordWebhookDraft),
+      displayName: discordNameDraft.trim(),
+    };
+    saveDiscordSettings(settings);
+    setDiscordSettings(settings);
+    setDiscordWebhookDraft(settings.webhookUrl);
+    setDiscordNameDraft(settings.displayName);
+    setDiscordError(null);
+    setDiscordStatus("Connected. New rolls and draws will be posted automatically.");
+  }
+
+  function disconnectDiscord() {
+    clearDiscordSettings();
+    setDiscordSettings({ webhookUrl: "", displayName: "" });
+    setDiscordWebhookDraft("");
+    setDiscordNameDraft("");
+    setDiscordError(null);
+    setDiscordStatus("Disconnected from Discord.");
+  }
+
+  async function publishDiscordResult(result: DiscordResult) {
+    if (!discordSettings.webhookUrl) return;
+
+    setDiscordError(null);
+    setDiscordStatus("Posting result to Discord…");
+    try {
+      await postDiscordResult(discordSettings, result);
+      setDiscordStatus("Result posted to Discord.");
+    } catch (error) {
+      setDiscordStatus(null);
+      setDiscordError(error instanceof Error ? error.message : "Could not post to Discord.");
+      setDiscordSettingsOpen(true);
+    }
   }
 
   function adjustCardCount(amount: number) {
@@ -277,11 +383,102 @@ export function App() {
           <span className="eyebrow">DM Toolbox</span>
           <h1>Rolling Tools</h1>
         </div>
-        <div className="toolbar-stat">
-          <History size={16} />
-          <span>{diceHistory.length + cardHistory.length} recent results</span>
+        <div className="toolbar-actions">
+          <div className="toolbar-stat">
+            <History size={16} />
+            <span>{diceHistory.length + cardHistory.length} recent results</span>
+          </div>
+          <button
+            className={`discord-connect-button ${discordConnected ? "connected" : ""}`}
+            type="button"
+            onClick={() => setDiscordSettingsOpen((current) => !current)}
+            aria-expanded={discordSettingsOpen}
+          >
+            <Link2 size={16} />
+            <span>{discordConnected ? "Discord connected" : "Connect Discord"}</span>
+          </button>
         </div>
       </section>
+
+      {discordSettingsOpen && (
+        <section className="discord-settings" aria-label="Discord connection">
+          <header>
+            <div>
+              <span className="eyebrow">Channel history</span>
+              <h2>Discord connection</h2>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setDiscordSettingsOpen(false)}
+              aria-label="Close Discord settings"
+            >
+              <X size={17} />
+            </button>
+          </header>
+
+          <p>
+            Create an incoming webhook for the channel, then paste its URL here. It is saved only
+            in this browser and every new result is posted automatically.
+          </p>
+
+          <form onSubmit={connectDiscord}>
+            <label>
+              <span>Webhook URL</span>
+              <input
+                type="password"
+                value={discordWebhookDraft}
+                onChange={(event) => setDiscordWebhookDraft(event.target.value)}
+                placeholder="https://discord.com/api/webhooks/…"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label>
+              <span>Name shown in Discord</span>
+              <input
+                value={discordNameDraft}
+                onChange={(event) => setDiscordNameDraft(event.target.value)}
+                placeholder="Rolling Tools"
+                maxLength={80}
+              />
+            </label>
+            <button className="primary-button" type="submit">
+              <Link2 size={16} />
+              <span>{discordConnected ? "Update connection" : "Connect"}</span>
+            </button>
+            {discordConnected && (
+              <button className="disconnect-button" type="button" onClick={disconnectDiscord}>
+                <Unplug size={16} />
+                <span>Disconnect</span>
+              </button>
+            )}
+          </form>
+
+          <div className="discord-help">
+            <span>Treat the webhook URL like a password: anyone with it can post to that channel.</span>
+            <a
+              href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"
+              target="_blank"
+              rel="noreferrer"
+            >
+              How to create a webhook
+              <ExternalLink size={13} />
+            </a>
+          </div>
+
+          {discordStatus && (
+            <p className="success-text" role="status">
+              {discordStatus}
+            </p>
+          )}
+          {discordError && (
+            <p className="error-text" role="alert">
+              {discordError}
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="tool-grid">
         <article className="tool-panel dice-panel">
@@ -761,6 +958,22 @@ function formatTime(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 function createPresetDraft(): CustomRollPreset {

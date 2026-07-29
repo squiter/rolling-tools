@@ -91,6 +91,111 @@ h2 {
   white-space: nowrap;
 }
 
+.toolbar-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.discord-connect-button,
+.disconnect-button {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-weight: 900;
+  gap: 0.42rem;
+  min-height: 2.4rem;
+  padding: 0 0.72rem;
+}
+
+.discord-connect-button {
+  background: #5865f2;
+  border: 1px solid #4752c4;
+  color: #fff;
+}
+
+.discord-connect-button.connected {
+  background: #e8f4e6;
+  border-color: #a8c99f;
+  color: #315c2d;
+}
+
+.discord-settings {
+  background: #fffbf2;
+  border: 1px solid #d2c0a3;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(45, 29, 21, 0.1);
+  display: grid;
+  gap: 0.72rem;
+  margin: 0 auto 1.15rem;
+  max-width: 1180px;
+  padding: clamp(0.9rem, 2vw, 1.15rem);
+}
+
+.discord-settings header,
+.discord-help {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.discord-settings > p {
+  color: #594f45;
+  margin: 0;
+}
+
+.discord-settings form {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(16rem, 1fr) minmax(10rem, 0.45fr) auto auto;
+}
+
+.discord-settings label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.discord-settings label > span {
+  color: #5e5045;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.disconnect-button {
+  background: #f5e6e1;
+  border: 1px solid #dfb6aa;
+  color: #7c382d;
+}
+
+.discord-help {
+  color: #6b5b4e;
+  font-size: 0.78rem;
+}
+
+.discord-help a {
+  align-items: center;
+  color: #3e4fb6;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 900;
+  gap: 0.25rem;
+}
+
+.success-text {
+  background: #e8f4e6;
+  border: 1px solid #a8c99f;
+  border-radius: 7px;
+  color: #315c2d !important;
+  font-size: 0.84rem;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+}
+
 .tool-grid {
   display: grid;
   gap: 1.15rem;
@@ -882,8 +987,32 @@ input:focus {
 
 @media (max-width: 820px) {
   .toolbar {
-    align-items: start;
+    align-items: stretch;
     display: grid;
+  }
+
+  .toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .toolbar-stat,
+  .discord-connect-button {
+    flex: 1;
+  }
+
+  .discord-settings form {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .discord-settings form .primary-button,
+  .disconnect-button {
+    width: 100%;
+  }
+
+  .discord-help {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .tool-grid {
