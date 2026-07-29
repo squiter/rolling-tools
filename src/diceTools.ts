@@ -1,5 +1,16 @@
 export type RollMode = "normal" | "advantage" | "disadvantage";
 
+export function applyRollMode(current: string, rollMode: RollMode): string {
+  const formula = current.trim();
+  if (!formula) return formula;
+
+  const notation =
+    rollMode === "advantage" ? "d20adv" : rollMode === "disadvantage" ? "d20dis" : "d20";
+  const d20TermPattern = /(^|[+-])(?:1?d20(?:adv|dis)?|2d20k[hl]1)(?=$|[+-])/i;
+
+  return formula.replace(d20TermPattern, (_term, sign: string) => `${sign}${notation}`);
+}
+
 export function incrementDiceFormula(current: string, sides: number, rollMode: RollMode): string {
   const formula = current.trim();
   const notation = buildDieNotation(sides, rollMode);

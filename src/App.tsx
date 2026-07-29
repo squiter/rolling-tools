@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { formatDiceRoll, getPhysicalDiceNotations, rollDiceFormula } from "./dice";
-import { appendModifier, incrementDiceFormula, RollMode } from "./diceTools";
+import { appendModifier, applyRollMode, incrementDiceFormula, RollMode } from "./diceTools";
 import { buildDeck, CardDraw, fullDeck, PlayingCard, shuffleCards, suitGlyph } from "./cards";
 import {
   clearDiscordSettings,
@@ -107,6 +107,11 @@ export function App() {
 
   function addDiceBuilderModifier(amount: number) {
     setDiceFormula((current) => appendModifier(current, amount));
+  }
+
+  function selectRollMode(mode: RollMode) {
+    setRollMode(mode);
+    setDiceFormula((current) => applyRollMode(current, mode));
   }
 
   async function rollTrayDice(event?: React.FormEvent) {
@@ -692,7 +697,7 @@ export function App() {
                 className={rollMode === mode ? "active" : ""}
                 key={mode}
                 type="button"
-                onClick={() => setRollMode(mode as RollMode)}
+                onClick={() => selectRollMode(mode as RollMode)}
               >
                 {label}
               </button>
